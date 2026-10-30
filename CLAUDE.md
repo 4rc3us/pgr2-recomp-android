@@ -1,12 +1,14 @@
-# Project Gotham Racing 2 (original Xbox) - static recompilation
+# Project Gotham Racing 2 (original Xbox) - static recompilation (Android / ARM64 Port)
 
-Goal: a native Windows port of PGR2 built with the XboxXBE-Recomp toolkit in `sdk/` (a git submodule).
-Read `sdk/README.md`, `sdk/harness/README.md`, `PROGRESS.md` and `FINDINGS.md` at the start of every session.
+Goal: a native Android (ARM64 / Vulkan 1.3) port of PGR2 built with the XboxXBE-Recomp toolkit in `sdk/` (git submodule), targeting high-performance devices like the Samsung Galaxy S25 Ultra (Qualcomm Snapdragon 8 Elite / Adreno 830), while preserving headless Linux testing and the native Windows build.
+Read `sdk/README.md`, `sdk/harness/README.md`, `PROGRESS.md`, `FINDINGS.md` and `ANDROID.md` at the start of every session.
 
 ## Environment
-- Headless Ubuntu VM. No GPU, no window. Harry builds and play-tests the real Windows exe separately.
-- Here you build the Linux tools, regenerate code, and run the game in the headless harness.
-- Game files (Harry's own disc) are in `assets/`. Never commit, upload or paste them, or generated code.
+- Host Linux environment for tool building, recompilation and headless CPU verification.
+- Target device: Android ARM64 (`arm64-v8a` / ARMv9-a Oryon, Adreno 830 GPU, Vulkan 1.3).
+- Android NDK (r27+), Clang toolchain, CMake 3.25+, Ninja, ADB.
+- Note on Android 15/16 memory: Support 16 KB page sizes (`-Wl,-z,max-page-size=16384`) in Android binaries and memory mapping (`mmap`).
+- Game files are in `assets/`. Never commit, upload or paste them, or generated code.
   `assets/`, `generated/`, `build/`, `.local/` and `captures/` are git-ignored; keep it that way.
 - Signatures in `sdk/xdk/*/signatures.toml` are hashes and lengths only. Never store library bytes.
 
@@ -14,49 +16,45 @@ Read `sdk/README.md`, `sdk/harness/README.md`, `PROGRESS.md` and `FINDINGS.md` a
 - `scripts/linux-tools.sh`   configure for Linux + build `xbe_symbols` and `xbe_recomp`
 - `build/linux/xbe_symbols assets/default.xbe sdk/xdk --out config/game.toml`
      prints the XBE's XDK library versions, matches XDK functions, rewrites config/game.toml completely.
-     Stops if `sdk/xdk/<build>/` has no signatures.toml.
-- Config: `config/game.toml` is xbe_symbols output only, never edit it. `config/pgr2.toml` is the file the build reads:
-     it includes game.toml and holds every hand entry ([[hook]], [[function]], [[switch]], [functions], [xbe] data_ranges
-     and trace). A symbol found by hand goes into the signatures instead:
-     add it to game.toml, `build/linux/xbe_symbols --sign config/pgr2.toml --out sdk/xdk/5659/signatures.toml`,
-     then rescan; the rescan must reproduce game.toml.
 - `scripts/recompile.sh`      regenerate `generated/game`
-- `scripts/harness.sh [secs] [pad] [ENV=..]`   build + run headless; e.g. `scripts/harness.sh 120 scripts/pad/boot.txt REF=600`
-     `REF=N` draws every Nth frame on the CPU into PNGs in `captures/` (view them with Read),
-     `CAP=N` writes each Nth frame's draw list, `snap` file in the run folder grabs the next two frames.
-     `KEEP_HDD=1 scripts/harness.sh ...` keeps the emulated hard disk from the last run (a normal boot); without it
-     every run is a first boot that formats the cache partition and copies the cache (about 100 s of movies first).
-     Pad scripts: `boot.txt` reaches the title screen, `none.txt` presses nothing. Frames are paced to 60 a second
-     (`FPS=N`, `FPS=0` unpaced), so pad frames are wall clock; use REF of 600 or more, or `snap`.
-- `scripts/linktest.sh` two headless instances over system link (LINKTEST OK); `scripts/savetest.sh`, `scripts/soak.sh N`.
-- Debugging: `gdb` (/usr/bin/gdb). Recompiled functions are `__imp__sub_XXXXXXXX(X86Context& ctx /*rdi*/, base)`;
-     guest memory is at 0x100000000, guest esp is the dword at ctx+16.
-- Ghidra: `python3 sdk/tools/symbols/xbe2pe.py config/pgr2.toml .local/game.exe`, then
-  `/opt/ghidra/support/analyzeHeadless ~/ghidra-projects pgr2 -import .local/game.exe` (add `-process`/scripts as needed).
-  Then `scripts/ghidra.sh Decomp|Disasm|FindOperand|Callers|DumpRange ...` runs the helper scripts in sdk/scripts/ghidra.
-- `scripts/*.sh` are one-line wrappers for the shared scripts in `sdk/scripts`; this game's values
-  (log name, build target, smoke menu window, soak pad generator) are in `scripts/game.env`.
+- `scripts/harness.sh [secs] [pad] [ENV=..]`   build + run headless on Linux; e.g. `scripts/harness.sh 120 scripts/pad/boot.txt REF=600`
+- `scripts/smoke.sh`          runs standard headless smoke test (title -> Instant Action -> race). Must print SMOKE OK.
+- Android builds:
+  - Cross-compile with Android NDK toolchain (`-DANDROID_ABI=arm64-v8a`, `-DANDROID_PLATFORM=android-31`).
+  - `adb push` binaries/assets to `/data/local/tmp/pgr2/` or `/sdcard/Android/data/org.recomp.pgr2/files/`.
+- Debugging:
+  - Linux: `gdb` (/usr/bin/gdb). Guest memory is at 0x100000000, guest esp is at ctx+16.
+  - Android: `lldb` via `adb` / ndk-gdb or logcat (`adb logcat -s pgr2`).
+  - Shaders: `scripts/shadercheck.sh` to validate translated shaders.
 
-## Plan
-1. Extract the XBE's library versions. If the build is not 5849, create `sdk/xdk/<build>/`:
-   seed it with copies of `sdk/xdk/5849/*.toml`, run xbe_symbols, then fix misses by hand in Ghidra.
-   Re-derive every `layout.toml` offset from PGR2's own code, citing the instruction address as 5849 does.
-2. Get to boot: resolve trapping stubs hit during boot, one at a time.
-3. Main menu, then a race, then a full race without crashes.
-4. Check early whether PGR2 uses D3DDevice_RunPushBuffer / CreatePushBuffer or writes push buffers directly.
-   The runtime does not replay recorded push buffers; flag this to Harry as soon as you know.
+## Android Target Plan
+1. **CPU & Platform Portability (ARM64 Bring-up):**
+   - Translate / adapt x86 CPU intrinsics to portable SIMDe / ARM NEON.
+   - Verify guest memory mapping (`mmap`) with 4 KB guest / 16 KB host page sizes.
+   - Run headless harness on ARM64 (Linux / Android shell via ADB) with CPU reference renderer.
+2. **Vulkan 1.3 Graphics Backend (Adreno 830):**
+   - Implement Vulkan renderer in `sdk/` matching console-accurate behaviors established in FINDINGS.md:
+     - W-buffering (`D3DZB_USEW`) and far-plane clamping (`z <= w`).
+     - Point sprites (`oPts` / `gl_PointSize`) for foliage/trees.
+     - Depth-as-colour sampling (`kTexDepthBytes`) for depth-of-field effects.
+     - Cube map reflection passes (`SetRenderTargetFast`) and visibility queries.
+     - Disk pipeline cache for zero-stutter shader compilation.
+3. **Android App & Platform Integration:**
+   - SDL3 / NativeActivity packaging (`libPGR2.so` + APK).
+   - Audio via AAudio / SDL3 at 48 kHz.
+   - Display aspect ratio handling for tall screens (~19.5:9 on S25 Ultra, centered 16:9 HUD).
+   - Storage isolation: virtual Xbox drives mapped to internal/external app storage.
+   - Input: Gamepad support (Bluetooth / USB-C) and on-screen touch overlay.
 
 ## Working rules
 - One problem at a time. After each meaningful step, add a dated entry at the top of PROGRESS.md's log
   (what changed, evidence, next step), update its Status block, and commit.
+- Tag findings in `FINDINGS.md` as **[console]**, **[PGR2]**, or **[android]**.
 - Game-specific fixes go in `src/game` (X86_FUNC overrides, [[hook]]/[[function]]/[[switch]] in config/pgr2.toml), not in
-  generated code. SDK changes (new XDK data, runtime fixes) go in the `sdk/` submodule as separate commits.
+  generated code. SDK changes (ARM64 support, Vulkan backend, SDL Android runtime) go in the `sdk/` submodule as separate commits.
 - If the same problem survives 3 genuinely different attempts, stop: write up what you tried and what you
-  think is happening in PROGRESS.md, commit, and tell Harry.
-- Run `scripts/smoke.sh` (headless: title -> Instant Action -> race, about 4 minutes) before every fast-forward of
-  `main`; it must print SMOKE OK. It fails on traps, on missing the race, or on frames stopping.
+  think is happening in PROGRESS.md, commit, and explain the blocker.
+- Run `scripts/smoke.sh` before merging to `main`; it must print SMOKE OK.
 - Work on one branch per task. When the task ends and everything builds, fast-forward `main` to it
-  (`git merge --ff-only`) and push both. SDK work goes on a task branch of the fork (hk21x/XboxXBERecomp),
-  fast-forwarded into the fork's `main`, the SDK line this repository tracks (2026-10-22: `pgr2-xdk5659` is
-  frozen).
+  (`git merge --ff-only`) and push both.
 - Never force-push. Never rewrite history.
