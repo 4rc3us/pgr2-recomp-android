@@ -3,6 +3,20 @@
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
+- Target Device: Samsung Galaxy S25 Ultra (SM-S938B), Snapdragon 8 Elite (SM8750 / Oryon ARMv9), GPU Adreno 830 (Vulkan 1.3), Android 15/16 (16 KB page-aligned support)
+- ADB: Connected wirelessly at 192.168.1.17:35605 (SM-S938B detected)
+- SDK Submodule: Configured and cloned to fork git@personal:4rc3us/XboxXBERecomp.git
+- Milestone: 4 (Windows/Linux base) -> Android Port Bring-up
+- XDK 5659: 191 of 250 functions, 13 of 13 data
+
+## Log
+
+### 2026-10-30 - Android Bring-up Phase 0: SDK submodule switched to fork and S25 Ultra connected
+- Initialized and switched `sdk/` submodule to user fork `git@personal:4rc3us/XboxXBERecomp.git`.
+- Connected over ADB to the Samsung Galaxy S25 Ultra (`SM-S938B`, SoC `SM8750` Snapdragon 8 Elite, GPU `adreno` 830, ABI `arm64-v8a`).
+- Updated CLAUDE.md for the Android port guidelines and target requirements (ARM64 SIMDe, Vulkan 1.3, 16 KB page alignment).
+- Next: Place game assets (`default.xbe`) in `assets/`, setup Android NDK cross-compilation toolchain and start ARM64 bring-up.
+
 - Milestone: 4 - races run under pad control; Windows: boots, movies, menus, races, saves, audio, reflections
 - XDK 5659: 191 of 250 functions, 13 of 13 data
 - Speed: paced by the game's present interval (menus 60, races 30); race_60fps option (experimental)
