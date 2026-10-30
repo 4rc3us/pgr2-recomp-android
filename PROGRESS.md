@@ -3,19 +3,32 @@
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
-- Target Device: Samsung Galaxy S25 Ultra (SM-S938B), Snapdragon 8 Elite (SM8750 / Oryon ARMv9), GPU Adreno 830 (Vulkan 1.3), Android 15/16 (16 KB page-aligned support)
+- Target Device: Samsung Galaxy S25 Ultra (SM-S938B), Snapdragon 8 Elite (SM8750 / Oryon ARMv9), GPU Adreno 830 (Vulkan 1.3), Android 15/16 (4 KB/16 KB page-aligned support)
 - ADB: Connected wirelessly at 192.168.1.17:35605 (SM-S938B detected)
-- SDK Submodule: Configured and cloned to fork git@personal:4rc3us/XboxXBERecomp.git
-- Milestone: 4 (Windows/Linux base) -> Android Port Bring-up
+- ARM64 Native Execution: SUCCESS. Headless harness executed directly on Samsung Galaxy S25 Ultra Oryon CPU.
+- Game Boot: SUCCESS. Formatted cache partition (Z:), copied introductory movie assets, played Intro1.xmv and Intro2.xmv, reaching 720+ vblanks at 60 FPS. Captured frames confirmed (captures/s25u_ref_00120.png, captures/s25u_ref_00600.png).
+- SDK Submodule: Branch arm64-bringup pushed to user fork git@personal:4rc3us/XboxXBERecomp.git
+- Milestone: Phase 1 (ARM64 CPU Bring-up) Completed -> Phase 2 (Vulkan 1.3 Rendering / APK Packaging)
 - XDK 5659: 191 of 250 functions, 13 of 13 data
 
 ## Log
 
-### 2026-10-30 - Android Bring-up Phase 0: SDK submodule switched to fork and S25 Ultra connected
-- Initialized and switched `sdk/` submodule to user fork `git@personal:4rc3us/XboxXBERecomp.git`.
-- Connected over ADB to the Samsung Galaxy S25 Ultra (`SM-S938B`, SoC `SM8750` Snapdragon 8 Elite, GPU `adreno` 830, ABI `arm64-v8a`).
-- Updated CLAUDE.md for the Android port guidelines and target requirements (ARM64 SIMDe, Vulkan 1.3, 16 KB page alignment).
-- Next: Place game assets (`default.xbe`) in `assets/`, setup Android NDK cross-compilation toolchain and start ARM64 bring-up.
+### 2026-10-30 - Phase 1: PGR2 Boots on Samsung Galaxy S25 Ultra (Snapdragon 8 Elite / ARM64)
+- Ported SDK runtime and harness to Android ARM64 (`aarch64-linux-android35` via Android NDK r27c):
+  - Solved x86-only intrin headers in `dispatch.cpp` and `render_thread.cpp`.
+  - Added `<unistd.h>` for `ftruncate` in `memory.cpp`.
+  - Guarded POSIX fibers for Android Bionic in `fibers.cpp`.
+  - Adapted crash signal handler in `main_test.cpp` for aarch64 `uc_mcontext.pc` and `regs[0]`.
+  - Tuned compiler architecture flags to `-march=armv8.2-a+crypto+fp16+rcpc+dotprod` to prevent LLVM emitting unsupported SVE vector instructions on the Oryon core.
+  - Linked `libc++` statically to avoid missing dynamic library issues on `/data/local/tmp`.
+- Pushed full disc ISO (`pgr2.iso`, 5.6 GB) to Galaxy S25 Ultra storage.
+- Executed `PGR2_android_cli pgr2.iso` directly on the S25 Ultra:
+  - Formatted virtual cache partition Z:, mounted DVD virtual drive D: and save partition U:.
+  - Successfully read XMV video streams (`Intro1.xmv`, `Intro2.xmv`), running at steady 60 FPS paced by vblank.
+  - Captured frames with `REF=120` and verified PNG images on host: `captures/s25u_ref_00120.png` and `captures/s25u_ref_00600.png`.
+- Pushed branch `arm64-bringup` to SDK fork `git@personal:4rc3us/XboxXBERecomp.git`.
+- Next: Phase 2 - Implement Vulkan 1.3 backend for Adreno 830 and package into an Android APK with SDL3.
+
 
 - Milestone: 4 - races run under pad control; Windows: boots, movies, menus, races, saves, audio, reflections
 - XDK 5659: 191 of 250 functions, 13 of 13 data
