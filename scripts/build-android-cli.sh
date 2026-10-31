@@ -17,7 +17,7 @@ RT="$REPO/sdk/runtime"
 H="$REPO/sdk/harness"
 
 BASE="-std=c++20 -target aarch64-linux-android35 -march=armv8.2-a+crypto+fp16+rcpc+dotprod -fno-strict-aliasing"
-HOST="$BASE -O2 -g -I$REPO/src -I$RT -I$GEN -I$H -I$H/compat -DXBE_RAW_VERTICES=0 -DXBE_RENDER_THREAD=0"
+HOST="$BASE -O2 -g -I$REPO/src -I$RT -I$GEN -I$H -I$H/compat -I$NDK/sources/third_party/shaderc/include -DXBE_RAW_VERTICES=0 -DXBE_RENDER_THREAD=0"
 
 echo "[1/3] Compiling generated game code for ARM64 ($JOBS jobs)..."
 export CXX BASE RT GEN GEN_OBJ
@@ -44,5 +44,7 @@ done
 wait
 
 echo "[3/3] Linking PGR2_android_cli..."
-$CXX $BASE -O2 -o "$OUT/PGR2_android_cli" "${objs[@]}" "$GEN_OBJ"/*.o -static-libstdc++ -llog
+$CXX $BASE -O2 -o "$OUT/PGR2_android_cli" "${objs[@]}" "$GEN_OBJ"/*.o \
+    "$NDK/sources/third_party/shaderc/libs/c++_static/arm64-v8a/libshaderc.a" \
+    -lvulkan -static-libstdc++ -llog
 echo "Built $OUT/PGR2_android_cli successfully!"

@@ -6,12 +6,27 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Target Device: Samsung Galaxy S25 Ultra (SM-S938B), Snapdragon 8 Elite (SM8750 / Oryon ARMv9), GPU Adreno 830 (Vulkan 1.3), Android 15/16 (4 KB/16 KB page-aligned support)
 - ADB: Connected wirelessly at 192.168.1.17:35605 (SM-S938B detected)
 - ARM64 Native Execution: SUCCESS. Headless harness executed directly on Samsung Galaxy S25 Ultra Oryon CPU.
-- Game Boot: SUCCESS. Formatted cache partition (Z:), copied introductory movie assets, played Intro1.xmv and Intro2.xmv, reaching 720+ vblanks at 60 FPS. Captured frames confirmed (captures/s25u_ref_00120.png, captures/s25u_ref_00600.png).
+- Vulkan 1.3 Backend: SUCCESS. Implemented native Vulkan 1.3 backend for Adreno 830 in `sdk/runtime/gpu/vulkan.cpp` with dynamic rendering, synchronization2, depth clip control, and runtime shader compilation via `shaderc`.
+- Game Boot (Hardware Rendered): SUCCESS. Direct3D 8 initialized, Adreno 830 selected, intro movies and front-end menus loaded and rendering at 60 FPS on GPU.
 - SDK Submodule: Branch arm64-bringup pushed to user fork git@personal:4rc3us/XboxXBERecomp.git
-- Milestone: Phase 1 (ARM64 CPU Bring-up) Completed -> Phase 2 (Vulkan 1.3 Rendering / APK Packaging)
+- Milestone: Phase 2 (Vulkan 1.3 Backend) In Progress -> SDL3 Android APK Packaging
 - XDK 5659: 191 of 250 functions, 13 of 13 data
 
 ## Log
+
+### 2026-10-31 - Phase 2: Vulkan 1.3 Backend Implemented & Verified on Adreno 830
+- Implemented `gpu::VulkanBackend` in `sdk/runtime/gpu/vulkan.cpp` (and `vulkan.h`):
+  - Utilizes Vulkan 1.3 `dynamicRendering` (`vkCmdBeginRendering` / `vkCmdEndRendering`) and `synchronization2` (`vkCmdPipelineBarrier2`).
+  - Enables `VK_EXT_depth_clip_control`, `depthClamp`, `depthBiasClamp`, and `samplerAnisotropy` (16x).
+  - Integrated `shaderc` compiled with Android NDK r27c for runtime translation of Xbox HLSL vertex/pixel shaders to SPIR-V 1.6 targeting Vulkan 1.3.
+  - Configured explicit HLSL register mappings: `b0` (VS c[192]), `b1` (DC draw constants), `t0..t3` (textures), `s0..s3` (samplers).
+  - Built 16 MB dynamic ring staging buffer for vertex/index uploads and uniform buffer allocations.
+  - Built `libSDL3.a` for Android ARM64 (`.deps/SDL3/build-arm64/libSDL3.a`) with Vulkan and AAudio support.
+- Tested live on Samsung Galaxy S25 Ultra:
+  - Game detected and initialized Qualcomm Adreno 830 (Driver 0x80320040, Vulkan API 1.3.284).
+  - Both intro videos played and reached menu loop with continuous GPU frame presents.
+- Pushed commit `5ecd771` to SDK submodule branch `arm64-bringup`.
+- Next: Package into Android APK with SDL3 Activity and Gradle harness.
 
 ### 2026-10-30 - Phase 1: PGR2 Boots on Samsung Galaxy S25 Ultra (Snapdragon 8 Elite / ARM64)
 - Ported SDK runtime and harness to Android ARM64 (`aarch64-linux-android35` via Android NDK r27c):
